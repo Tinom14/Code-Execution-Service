@@ -1,0 +1,149 @@
+volumes:
+  postgres_data:
+  redis_data:
+
+services:
+  db:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: app_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d app_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    environment:
+      - REDIS_PASSWORD=redis
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: ./http_service/Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: app_db
+      POSTGRES_SSLMODE: disable
+      MIGRATIONS_ENABLED: "true"
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: redis
+      REDIS_DB: 0
+      RABBITMQ_HOST: broker
+      RABBITMQ_PORT: 5672
+    volumes:
+        - ./pkg/postgres_connect/migrations:/app/postgres_connect/migrations
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      broker:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "nc", "-z", "localhost", "8080" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  broker:
+    image: "rabbitmq:3-management"
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 30s
+      timeout: 30s
+      retries: 3
+
+  processor:
+    build:
+      context: .
+      dockerfile: ./processor/Dockerfile
+    environment:
+      RABBITMQ_QUEUE_NAME: tasks
+      RABBITMQ_HOST: broker
+      RABBITMQ_PORT: 5672
+      PROMETHEUS_PORT: 9090
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: app_db
+      POSTGRES_SSLMODE: disable
+      MIGRATIONS_ENABLED: "false"
+    ports:
+      - "9090:9090"
+    depends_on:
+      broker:
+        condition: service_healthy
+      prometheus:
+        condition: service_healthy
+      grafana:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /tmp:/tmp
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:9090"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  prometheus:
+    image: prom/prometheus
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    healthcheck:
+      test: [ "CMD", "wget", "-q", "-O", "-", "http://localhost:9090" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  grafana:
+    image: grafana/grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin123}
+    healthcheck:
+      test: [ "CMD", "wget", "-q", "-O", "-", "http://localhost:3000" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  test:
+    build:
+      context: ./tests
+      dockerfile: Dockerfile
+    depends_on:
+      app:
+        condition: service_healthy
+    profiles: ['test']

@@ -1,0 +1,213 @@
+basePath: /
+definitions:
+  types.GetTaskResultHandlerResponse:
+    properties:
+      result:
+        type: string
+    type: object
+  types.GetTaskStatusHandlerResponse:
+    properties:
+      status:
+        type: string
+    type: object
+  types.PostTaskHandlerResponse:
+    properties:
+      task_id:
+        type: string
+    type: object
+  types.SessionResponse:
+    properties:
+      token:
+        type: string
+    type: object
+  types.UserHandlerRequest:
+    properties:
+      password:
+        type: string
+      username:
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact: {}
+  description: API для создания задач и получения их статуса/результата.
+  title: Task API
+  version: "1.0"
+paths:
+  /login:
+    post:
+      consumes:
+      - application/json
+      description: Проверяет логин и пароль, возвращает токен
+      parameters:
+      - description: Данные пользователя
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/types.UserHandlerRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Успешный вход
+          schema:
+            $ref: '#/definitions/types.SessionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+      summary: Аутентификация пользователя
+      tags:
+      - auth
+  /protected-endpoint:
+    get:
+      description: Позволяет доступ только авторизованным пользователям
+      parameters:
+      - description: 'Токен авторизации, формат: Bearer {token}'
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      responses:
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+      security:
+      - ApiKeyAuth: []
+      summary: Проверка токена
+      tags:
+      - auth
+  /register:
+    post:
+      consumes:
+      - application/json
+      description: Создаёт нового пользователя
+      parameters:
+      - description: Данные пользователя
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/types.UserHandlerRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+      summary: Регистрация пользователя
+      tags:
+      - register
+  /result/{task_id}:
+    get:
+      consumes:
+      - application/json
+      description: Возвращает результат выполнения задачи по ID
+      parameters:
+      - description: ID задачи
+        in: path
+        name: task_id
+        required: true
+        type: string
+      - description: 'Токен авторизации, формат: Bearer {token}'
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/types.GetTaskResultHandlerResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      security:
+      - ApiKeyAuth: []
+      summary: Получить результат задачи
+      tags:
+      - tasks
+  /status/{task_id}:
+    get:
+      consumes:
+      - application/json
+      description: Возвращает текущий статус задачи по ID
+      parameters:
+      - description: ID задачи
+        in: path
+        name: task_id
+        required: true
+        type: string
+      - description: 'Токен авторизации, формат: Bearer {token}'
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/types.GetTaskStatusHandlerResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      security:
+      - ApiKeyAuth: []
+      summary: Получить статус задачи
+      tags:
+      - tasks
+  /task:
+    post:
+      consumes:
+      - application/json
+      description: Запускает новую задачу и возвращает ее ID
+      parameters:
+      - description: 'Токен авторизации, формат: Bearer {token}'
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/types.PostTaskHandlerResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "500":
+          description: Internal Server Error
+          schema:
+            type: string
+      security:
+      - ApiKeyAuth: []
+      summary: Создать задачу
+      tags:
+      - tasks
+swagger: "2.0"
